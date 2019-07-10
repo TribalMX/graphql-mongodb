@@ -35,6 +35,13 @@ export const start = async () => {
         code: String
         label: String
         assessment: Assessment
+        questions: [Question]
+      }
+
+      type Question {
+        name: String
+        label: String
+        category: Category
       }
 
       schema {
@@ -56,10 +63,23 @@ export const start = async () => {
       Category: {
         assessment: async ({code}) => {
           let category = await db.collection('categories').findOne({code: code},{assessment_code:1})
-          console.log('about to look for assessment ', category.assessment_code)
           let assessment = await db.collection('assessments').findOne({code: category.assessment_code},{code:1, title:1})
-          console.log('found ', assessment)
           return assessment
+        }, 
+        questions: async ({code}) => {
+          return await db.collection('categories').aggregate([
+            { "$match": {code: 'design_quality'}},
+            { "$unwind": "$questions" }, 
+            { "$project": {  
+              name: "$questions.name",  
+              label: "$questions.label"
+            }}
+            ]).toArray()
+        }
+      },
+      Question: {
+        category: async ({name}) => {
+          return await db.collection('categories').findOne({"questions.name": name},{code: 1, label: 1})
         }
       }
     }
