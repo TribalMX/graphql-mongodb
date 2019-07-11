@@ -14,8 +14,6 @@ const URL = 'http://localhost'
 const PORT = 3001
 const MONGO_URL = 'mongodb://localhost:27017/coe'
 
-
-
 export const start = async () => {
   try {
     const db = await MongoClient.connect(MONGO_URL)
@@ -29,6 +27,18 @@ export const start = async () => {
         code: String
         title: String
         categories: [Category]
+        reviews: [Review]
+      }
+
+      type Review {
+        period: String
+        unit: Unit
+      }
+
+      type Unit {
+        code: String
+        name: String
+        address: String
       }
 
       type Category {
@@ -58,7 +68,44 @@ export const start = async () => {
       Assessment: {
         categories: async ({code}) => {
           return (await db.collection('categories').find({assessment_code: code},{code:1, label:1}).toArray())
-        }
+        },
+        reviews:  async ({code}) => {
+          console.log('Assessment reviews ',code)
+          return (await db.collection('reviews').aggregate([
+            {"$project": {
+              period_label:1,
+              unit_code: 1,
+              category_code: 1}},
+            {"$lookup": {
+              from: "categories",
+              localField: "category_code",
+              foreignField: "code",
+              as: "category"
+            }},
+            {"$match": { "category.assessment_code": code }},
+            {"$project": {
+              period_label:1,
+              unit_code: 1,
+              category_code: 1,
+              label: "$category.label",
+              assessment: "$category.assessment_code"
+            }},
+            {"$group": {
+              _id: {period: "$period_label", unit: "$unit_code"}
+            }},
+            {"$project": {
+              _id: 0,
+              period: "$_id.period",
+              unit: "$_id.unit"
+            }}
+          ]).toArray())
+        },
+      },
+      Review: {
+        unit: async ({unit}) => {
+          console.log('Review unit:', unit)
+          return await db.collection('units').findOne({code: unit},{code:1, name:1, address:1 })
+        }, 
       },
       Category: {
         assessment: async ({code}) => {
@@ -74,7 +121,7 @@ export const start = async () => {
               name: "$questions.name",  
               label: "$questions.label"
             }}
-            ]).toArray()
+          ]).toArray()
         }
       },
       Question: {
