@@ -33,6 +33,13 @@ export const start = async () => {
       type Review {
         period: String
         unit: Unit
+        answers: [Answer]
+      }
+
+      type Answer {
+        question: Question
+        answer: Int
+        comments: String
       }
 
       type Unit {
@@ -70,7 +77,6 @@ export const start = async () => {
           return (await db.collection('categories').find({assessment_code: code},{code:1, label:1}).toArray())
         },
         reviews:  async ({code}) => {
-          console.log('Assessment reviews ',code)
           return (await db.collection('reviews').aggregate([
             {"$project": {
               period_label:1,
@@ -101,11 +107,43 @@ export const start = async () => {
           ]).toArray())
         },
       },
+      Answer: {
+        question: async ({question}) => {
+          let pipe = await db.collection('categories').aggregate([
+            {"$unwind": "$questions"},
+            {"$match": {
+              "questions.name": question
+            }},
+            {"$project": {
+              _id: 0,
+              name: "$questions.name",
+              label: "$questions.label",
+              category: "$code"
+            }}
+          ]).toArray()
+          console.log('Answer question ', question, pipe)
+          return pipe[0]
+        }
+      },
       Review: {
         unit: async ({unit}) => {
-          console.log('Review unit:', unit)
           return await db.collection('units').findOne({code: unit},{code:1, name:1, address:1 })
-        }, 
+        },
+        answers: async ({period, unit}) => {
+          return (await db.collection('reviews').aggregate([
+            {"$match": {
+              period_label: period,
+              unit_code: unit,
+            }},
+            {"$unwind":"$answers"},
+            {"$project": {
+              _id: 0,
+              question: "$answers.question_name",
+              answer: "$answers.answer",
+              comments: "$answers.comments"
+            }}
+          ]).toArray())
+        }
       },
       Category: {
         assessment: async ({code}) => {
